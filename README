@@ -1,29 +1,162 @@
-Course Builder was born in July 2012 when we hosted a 2-week online,
-community-based course called Power Searching with Google. The course showcased
-search techniques and how to use them to solve real, everyday problems. We
-created Power Searching as a MOOC (Massive Open Online Course) by using a
-variety of Google's existing products and by writing an App Engine application
-for the course material and assessments.
-
-After running Power Searching, we decided to open source the code and provide
-documentation so others could replicate this experiment by creating and running
-their own courses.
-
 For more information on Course Builder, see the documentation at
-https://www.google.com/edu/openonline/course-builder/index.html
+https://www.google.com/edu/openonline/course-builder/docs/1.10/set-up-course-builder/set-up-course-builder.html
 
-Course Builder uses an HTML5 icon (found at
-coursebuilder/modules/core_tags/resources/html5-badge-h-solo.png)
-from w3.org, as licensed under the Creative Commons Attribution 3.0 Unported
-license version. For more information on HTML5, see http://www.w3.org/html5
 
-Course Builder also uses several Material icons provided by Google under the
-Apache 2.0 license.
+>>>> To deploy or update, Google now uses gcloud
+>>>> See: https://cloud.google.com/appengine/docs/python/tools/uploadinganapp
+>>>> For example:
+>>>> $ gcloud app deploy app.yaml --project ram8647 --version prod
 
-Course Builder automatically downloads a number of third-party libraries. Some
-are for use during development and deployment of software.  These are stored in
-your home directory under coursebuilder_resources_<version>.  Other libraries
-are included and deployed when your application is pushed to the App Engine
-servers.  These libraries are placed in a lib/ directory alongside the Course
-Builder source files.  All of these third-party packages are governed by their
-respective licenses found in the packages' respective directories or .zip files.
+>>>> To authenticate, needed for ETL, you can use Application Default Credentials
+>>>> (https://developers.google.com/identity/protocols/application-default-credentials). Then you need to:
+
+$ export GOOGLE_APPLICATION_CREDENTIALS="mobilecsp-a87421b38d9a.json"
+
+>>>> To download course data -- i.e., lessons, etc. The script has additional examples.
+
+$ sh scripts/etl.sh download course / mobilecsp-201608.appspot.com  --archive_path ./coursecontent.zip
+
+>>>> Above authentication did not work for the ram8647 course, based on GCB 1.8.  Instead:
+** Download and install Google Cloud APK
+$ gcloud auth login
+  You are now logged in as [ram8647@gmail.com].
+  Your current project is [mobilecsp-201608].  You can change this setting by running:
+
+$ gcloud config set project PROJECT_ID  # e.g., ram8647
+
+>>>>>>>>>>>> DOWNLOADING THE COURSE  <<<<<<<<<<<<<<<<<<<<<
+Appears to download only the overridden assets, not the whole course?  For example, in 
+asset/lib/ only asset/lib/quizly/quizzes.json was downloaded.  The following views
+were downloaded, which means these were the ones that we changed through the Dashboard.
+In v 1.10, these are listed as 'my items' under Style > Templates.
+
+  course.html
+  resources.html
+  staff.html
+  summary.html
+  unit.html
+
+>>>>>>>>>>>>>>>>>>>>>>>> CHANGING ON teach_mobileCSP <<<<<<<<<<<<<<<<<<<<<<<<
+* The '(Teachers)' tab appears only on the student site. This requires that
+  the Dashboard be used to change base-cours.html on the Teacher site.
+
+>>>>>>>>>>>>>>>>>>>>>>>  SETTINGS  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+*  Note that settings are not necessarily copied over when you make new versions
+of an existing course. 
+
+* Also, if settings have been changed through the dashboard, then changing them
+in course.yaml doesn't seem to have an effect.
+
+* Also, templates and other assets that have been overridden in the dashboard
+are not updated via the command line (appcfg).  
+
+>>>>>>>>>>>>>>>>>>>>>>> OUTLINE OF UPGRADING PROCESS >>>>>>>>>>>>>>>>>>>>>>>>
+See details here:  
+   https://www.google.com/edu/openonline/course-builder/docs/1.10/upgrade-course-builder/upgrade-course-builder.html
+
+Basic outline
+- Download app data, from existing course, both mobileCSP and teach_mobileCSP branches.
+
+  sh scripts/etl.sh download course /mobilecsp mobilecsp-201608.appspot.com --archive_path ../gcb-download-mobilecsp-v18.zip
+  sh scripts/etl.sh download course /teach_mobilecsp mobilecsp-201608.appspot.com --archive_path ../gcb-download-teach_mobilecsp-v18.zip
+
+- Set up and deploy new version of GCB
+- Upload app data for both mobilecsp and teach_mobilecsp:
+
+  sh scripts/etl.sh upload course /mobilecsp mobilecsp-201608.appspot.com --archive_path ../gcb-download-mobilecsp-v18.zip
+  sh scripts/etl.sh upload course /teach_mobilecsp mobilecsp-201608.appspot.com --archive_path ../gcb-download-teach_mobilecsp-v18.zip
+
+
+>>>>>>>>>>>>>>>>>> Upgrading Issues <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+* Questions are not filled in with blue circles on the syllabus or in the lessons.
+
+
+>>>>>>>>>>>>>>>>>>>>>>     CUSTOM STUFF        <<<<<<<<<<<<<<<<<<<<<<<<<
+
+Here are the parts to the core GCB that have been modified. See Github 
+for diffs. 
+
+* assets/lib 
+* controllers/privacy.py
+* models/progress.py
+* modules/assessment_tags/ - resources and templates
+* modules/core_ui -- missing toggle-button.css error
+* modules/course/courses.py
+* modules/quizly 
+* modules/skill_map/competency.py
+* modules/teacher
+* views/base_course.html
+* views/preview.html
+* views/privacy.html
+
+
+>>>>>>>>>>>>>>>>>>>>>>   Student Course Resources Tab   <<<<<<<<<<<<<<<
+-- Copy resources.py into controllers/
+-- Copy resources.html into views/
+-- Edit modules/courses/courses.py to import resources.py : from controllers import resources
+-- Modify courses_routes list in  modules/courses/courses.py : ('/resources', resources.ResourcesHandler),
+-- Add custom code to view/base_course.html:
+
+       <!-- custom code: Resources  -->
+        <li {% if navbar.resources %}class='active'{% endif %}>
+          {# I18N: Navbar tab. #}
+          <a href="resources">{{ gettext('Resources') }}</a>
+        </li>
+       <!--  end custom code -->
+
+>>>>>>>>>>>>>>>>>>>>>>        Quizly          <<<<<<<<<<<<<<<<<<<<<<<<
+-- Add quizly/ controller directory to the modules directory. This includes quizly.py
+-- Copy quizly/ source code to assets:  assets/lib/quizly
+-- Import module in main.py:  from modules.quizly import quizly
+   Register quizly module in main.py: quizly.register_module().enable()
+   OR NEW in 1.10: register it custom.yaml (one or the other, not both)
+-- Edit /views/base_course.html as follows: 
+     ...
+     <script src="assets/lib/activity-generic-1.3.js"></script>
+
+<!-- ***********  CUSTOMIZATION required for Quizly assessments  ***                                                                                                     
+     * which are processed in activity-generic.js. so this has to                                                                                                        
+     * go after activity-generic.js.                                                                                                                                     
+     ***************************************************************                                                                                                     -->
+  <script src="assets/lib/quizly/activity-quizme.js"></script>
+
+  <script src="/modules/oeditor/_static/js/butterbar.js"></script>
+  ...
+
+-- TODO:  Quizly is not showing up in the v1.10 dashboard component editor
+
+>>>>>>>>>>>>>>>>>>>>>>        Khanex          <<<<<<<<<<<<<<<<<<<<<<<<
+-- Add khanex/ directory to the modules directory
+-- Import module in main.py:  from modules.khanex import khanex
+   Register khanex module in main.py: khanex.register_module().enable()
+   OR NEW in 1.10: register it custom.yaml (one or the other, not both)
+
+>>>>>>>>>>>>>>>>>>>>>>   Lessons Framework and Hover <<<<<<<<<<<<<<<<<<<<<
+-- Copy the lessons/  folder into assets/lib/:   cp -r ../lessons assets/lib/
+
+
+>>>>>>>>>>>>>>>>>>>>>>       Teacher Dashboard          <<<<<<<<<<<<<<<<<<<<<<<<
+
+-- Add teacher directory to the modules directory
+-- Add modules.teacher.teacher to custom.yaml
+   OR Import module in main.py:  from modules.teacher_dashboard import teacher_dashboard
+   AND Register teacher_dashboard module in main.py: teacher_dashboard.register_module().enable()
+-- In models.py Replace the user_id property in the EventEntity class to the following line
+   user_id = db.StringProperty(indexed=True)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!  V1.10 Upgrade issues !!!!!!!!!!!!!!!!!!!!!!!!
+
+>>>>>>>>>>>>>>>>>>>>>>> NOT SURE IF THESE ARE NEEDED ANYMORE ?? <<<<<<<<<<<<<<<<<
+ preview.html -- not sure what this does? 
+ unit.html -- commented out the Show Syllabus/Hide Syllabus button
+
+>>>>>>>>>>>>>>>>>>>>>>>  assets/lib/activity-generic.js  <<<<<<<<<<<<<<<<<<<<<<<<
+NOTE:  Currently we are using the default v1.10 version of this file and everything seems to
+work.  At one point there was custom code in this file for processing Quizly Assessments (not activities)
+
+   * V1.10 Replaces gcbCanPostTagEvents to gcbCanRecordStudentEvents -- this is necessary to
+     to it to record when questions are completed. gcbCanPostTagEvents (in controllers.utils)
+     seems to be deprecated??
+
+
